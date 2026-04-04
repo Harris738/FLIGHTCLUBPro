@@ -105,6 +105,12 @@ window.showView = function (viewId) {
     target.classList.add("active");
     target.style.display = "block";
   }
+  // --- NEU: DATEN FÜR STATISTIK LADEN ---
+  if (viewId === "view-stats") {
+    if (typeof window.loadProStats === "function") {
+      window.loadProStats();
+    }
+  }
 
   const headerTitle = document.getElementById("current-view-title");
   if (headerTitle) {
@@ -121,6 +127,8 @@ window.showView = function (viewId) {
         '<span class="gold-part">LIVE</span><span class="white-part">TURNIER</span>',
       "counter-arena":
         '<span class="gold-part">DART</span><span class="white-part">ARENA</span>',
+      "view-stats":
+        '<span class="gold-part">PRO</span><span class="white-part">STATS</span>',
     };
     headerTitle.innerHTML = titles[viewId] || "FLIGHTCLUB PRO";
   }
@@ -169,3 +177,87 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+window.loadProStats = () => {
+  if (!currentUser) return;
+
+  // 1. Bestwert (Rekord) direkt aus dem User-Profil laden (Bestes Leg)
+  const userRef = ref(db, "users/" + currentUser.uid);
+  onValue(userRef, (snap) => {
+    const userData = snap.val();
+    const bestLegEl = document.getElementById("stat-best-leg");
+    if (bestLegEl) {
+      // Zeigt den Rekordwert aus dem Profil an
+      bestLegEl.innerText =
+        userData && userData.bestLeg ? userData.bestLeg + " Darts" : "--";
+    }
+  });
+
+  // 2. Hol dir den aktuellen Dashboard-Average für den Trend-Vergleich
+  const dashAvgEl = document.getElementById("dash-avg");
+  const currentGlobalAvg = dashAvgEl ? parseFloat(dashAvgEl.innerText) || 0 : 0;
+
+  // 3. Match-Historie aus user_stats laden
+  onValue(ref(db, "user_stats"), (snap) => {
+    const data = snap.val();
+    const historyContainer = document.getElementById("stats-history-container");
+    if (!historyContainer) return;
+
+    if (!data) {
+      historyContainer.innerHTML =
+        "<p style='opacity:0.5; text-align:center;'>Noch keine Spiele aufgezeichnet.</p>";
+      return;
+    }
+
+    // Filtere Spiele des aktuellen Users
+    const myStats = Object.values(data)
+      .filter((s) => s.uid === currentUser.uid)
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    // Berechnung der Highlights (Checkout-Darts Durchschnitt)
+    let totalCheckoutDarts = 0;
+    let checkoutCount = 0;
+
+    myStats.forEach((s) => {
+      if (s.checkoutDart) {
+        totalCheckoutDarts += s.checkoutDart;
+        checkoutCount++;
+      }
+    });
+
+    // Update der Checkout-Kachel oben
+    const avgCOEl = document.getElementById("stat-avg-checkout");
+    if (avgCOEl) {
+      avgCOEl.innerText =
+        checkoutCount > 0
+          ? (totalCheckoutDarts / checkoutCount).toFixed(1)
+          : "--";
+    }
+
+    // Liste rendern
+    historyContainer.innerHTML = "";
+    myStats.slice(0, 10).forEach((match) => {
+      const date = new Date(match.createdAt).toLocaleDateString("de-DE");
+
+      // Dynamischer Trend-Vergleich mit dem Dashboard-Average
+      const isBetter = match.finalAvg >= currentGlobalAvg;
+      const trendIcon = isBetter ? "📈" : "📉";
+      const trendColor = isBetter ? "var(--qualify-green)" : "var(--danger)";
+
+      const item = document.createElement("div");
+      item.className = "tournament-item";
+      item.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-weight:bold; color:#fff;">${match.name} (${date})</div>
+          <div style="font-size:0.7rem; color:var(--gold);">
+            AVG: ${match.finalAvg.toFixed(2)} | 1st 9: ${match.first9Avg ? match.first9Avg.toFixed(2) : "--"} | Darts: ${match.dartsUsed || "?"}
+          </div>
+        </div>
+        <div class="tile-arrow" style="opacity:1; color: ${trendColor}; font-size: 1.2rem;">
+          ${trendIcon}
+        </div>
+      `;
+      historyContainer.appendChild(item);
+    });
+  });
+};

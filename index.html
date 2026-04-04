@@ -413,14 +413,16 @@
             </div>
 
             <div
+              id="btn-dashboard-stats"
               class="action-tile"
-              onclick="alert('Statistiken folgen in Kürze!')"
+              onclick="showView('view-stats')"
             >
               <div class="tile-icon">📊</div>
               <div class="tile-content">
                 <h3>STATISTIKEN</h3>
                 <p>Deine Entwicklung ansehen</p>
               </div>
+              <div class="tile-arrow">→</div>
             </div>
 
             <div id="btn-dashboard-tournaments" class="action-tile">
@@ -580,6 +582,32 @@
         </div>
       </div>
 
+      <div id="view-stats" class="view">
+        <div class="header-nav">
+          <h1 class="dashboard-title">
+            <span class="gold-part">PRO</span>
+            <span class="white-part">STATS</span>
+          </h1>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Ø Checkout-Darts</div>
+            <div id="stat-avg-checkout" class="stat-value">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Bestes Leg (Darts)</div>
+            <div id="stat-best-leg" class="stat-value">--</div>
+          </div>
+        </div>
+
+        <div class="section-title">Deine letzten Matches</div>
+        <div
+          id="stats-history-container"
+          style="display: flex; flex-direction: column; gap: 10px"
+        ></div>
+      </div>
+
       <div id="view-setup" class="view">
         <h2 style="margin-top: 20px">🏆 <span>Event Setup</span></h2>
 
@@ -657,6 +685,21 @@
           <button onclick="confirmCheckout(2)">2</button>
           <button onclick="confirmCheckout(3)">3</button>
         </div>
+      </div>
+    </div>
+
+    <div id="double-attempt-modal" class="modal-overlay">
+      <div class="modal-content">
+        <h3>DARTS AUF DOPPEL?</h3>
+        <div class="checkout-options">
+          <button onclick="confirmDoubleAttempts(0)">0</button>
+          <button onclick="confirmDoubleAttempts(1)">1</button>
+          <button onclick="confirmDoubleAttempts(2)">2</button>
+          <button onclick="confirmDoubleAttempts(3)">3</button>
+        </div>
+        <p style="font-size: 0.7rem; margin-top: 15px; opacity: 0.7">
+          Wie viele Darts gingen auf ein Doppel-Feld?
+        </p>
       </div>
     </div>
 

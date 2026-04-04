@@ -232,24 +232,52 @@ const checkouts = {
   102: "T20 10 D16",
   101: "T17 10 D20",
 };
+const bogeys = [169, 168, 166, 165, 163, 162, 159];
 
 function getCheckout(score) {
   if (score > 170 || score < 2) return "";
+  if (bogeys.includes(score)) {
+    return "KEIN FINISH MÖGLICH"; // Anzeige für Bogey-Zahlen
+  }
+  // 2. Volle Tabelle prüfen
   if (checkouts[score]) return checkouts[score];
+
+  // 3. Direkte Doppel (2-40 gerade & 50)
   if (score <= 40 && score % 2 === 0) return "D" + score / 2;
-  if (score === 50) return "Bullseye";
+  if (score === 50) return "BULLSEYE";
+
+  // 4. Zahlen unter 60 (Präzise 2-Dart Kombinationen)
   if (score < 60) {
-    if (score > 40) return "S" + (score - 40) + " D20";
-    return "S" + (score % 2 === 0 ? score : score - 1) + "...";
+    if (score % 2 !== 0) {
+      // Ungerade: Single werfen um auf ein gerades Doppel zu kommen
+      // Wir versuchen immer, auf D20, D16 oder D12 zu kommen
+      if (score > 41) return "S" + (score - 40) + " D20";
+      if (score > 33) return "S" + (score - 32) + " D16";
+      return "S" + (score - (score - 1)) + " D" + (score - 1) / 2;
+    } else {
+      // Gerade Zahlen über 40 (z.B. 44, 58)
+      return "S" + (score - 40) + " D20";
+    }
   }
+
+  // 5. Zahlen von 61 bis 100 (2-Dart Finishes)
   if (score <= 100) {
-    let treble = 20;
-    let rest = score - treble * 3;
-    if (rest > 0 && rest % 2 === 0 && rest <= 40) return "T20 D" + rest / 2;
-    treble = 19;
-    rest = score - treble * 3;
-    if (rest > 0 && rest % 2 === 0 && rest <= 40) return "T19 D" + rest / 2;
+    // Wir versuchen es erst mit T20, dann T19, dann T18 etc.
+    const targets = [20, 19, 18, 17, 16, 15];
+    for (let t of targets) {
+      let rest = score - t * 3;
+      if (rest > 0 && rest <= 40 && rest % 2 === 0) {
+        return "T" + t + " D" + rest / 2;
+      }
+    }
+    // Falls kein Triple passt, versuchen wir Single + Double (für kleine Scores < 70)
+    if (score <= 70) {
+      let sRest = score - 20; // Versuch über S20
+      if (sRest > 0 && sRest <= 40 && sRest % 2 === 0)
+        return "S20 D" + sRest / 2;
+    }
   }
+
   return "FINISH MÖGLICH";
 }
 
@@ -379,6 +407,7 @@ window.submitPoints = () => {
   const input = document.getElementById("points-input");
   let val = parseInt(input.value);
   if (isNaN(val)) val = 0;
+
   if (val < 0 || val > 180) {
     alert("Bitte einen gültigen Wurf (0-180) eingeben!");
     input.value = "";
@@ -388,31 +417,71 @@ window.submitPoints = () => {
   dartGameHistory = JSON.parse(JSON.stringify(dartGame));
   const currentPlayer = dartGame.players[dartGame.activePlayerIndex];
 
-  // Stats tracken
-  currentPlayer.totalPoints += val;
-  currentPlayer.throws++;
-  const newScore = currentPlayer.score - val;
+  const oldScore = currentPlayer.score;
+  const newScore = oldScore - val;
+
+  // --- FIRST 9 ZÄHLUNG ---
+  if (dartGame.activePlayerIndex === 0 && currentPlayer.throws < 3) {
+    currentPlayer.first9Total = (currentPlayer.first9Total || 0) + val;
+    // Wir zählen die Aufnahmen (throws), um später durch die richtige Anzahl zu teilen
+    currentPlayer.first9Throws = (currentPlayer.first9Throws || 0) + 1;
+  }
 
   if (newScore === 0) {
-    // ANSTATT PROMPT: Zeige dein neues schickes Modal
+    // 1. DIREKTER SIEG
     document.getElementById("checkout-modal").style.display = "flex";
-
-    // Wir merken uns den Wert des letzten Wurfs für die zweite Funktion
     window.lastWinningVal = val;
   } else if (newScore < 2) {
+    // 2. BUST
     alert("BUST! Zu viel geworfen.");
     dartGame.activePlayerIndex =
       (dartGame.activePlayerIndex + 1) % dartGame.players.length;
     updateActiveUI();
   } else {
-    currentPlayer.score = newScore;
-    dartGame.activePlayerIndex =
-      (dartGame.activePlayerIndex + 1) % dartGame.players.length;
-    updateActiveUI();
+    // 3. NORMALER WURF: Prüfen auf Doppel-Möglichkeit
+    // Wir fragen NUR, wenn:
+    // a) Du wirfst (Index 0)
+    // b) Dein Start-Score ein Finish war (<= 170)
+    // c) Dein REST-Score jetzt 50 oder tiefer ist (denn nur dort sind Doppel)
+    const isPotentiallyAtDouble = oldScore <= 170 && newScore <= 50;
+
+    if (dartGame.activePlayerIndex === 0 && isPotentiallyAtDouble) {
+      window.pendingPoints = val;
+      document.getElementById("double-attempt-modal").style.display = "flex";
+    } else {
+      // Kein Doppel möglich (z.B. von 140 auf 95 Rest): Direkt weiter
+      currentPlayer.score = newScore;
+      currentPlayer.totalPoints += val;
+      currentPlayer.throws++;
+      dartGame.activePlayerIndex =
+        (dartGame.activePlayerIndex + 1) % dartGame.players.length;
+      updateActiveUI();
+    }
   }
 
   input.value = "";
   input.focus();
+};
+
+window.confirmDoubleAttempts = (attempts) => {
+  // Modal schließen
+  document.getElementById("double-attempt-modal").style.display = "none";
+
+  const currentPlayer = dartGame.players[0]; // Deine Stats
+  const val = window.pendingPoints; // Die vorhin gespeicherten Punkte
+
+  // Verpasste Doppel tracken
+  currentPlayer.missedDoubles = (currentPlayer.missedDoubles || 0) + attempts;
+
+  // Punkte anrechnen & Spieler wechseln
+  currentPlayer.score -= val;
+  currentPlayer.totalPoints += val;
+  currentPlayer.throws++;
+
+  dartGame.activePlayerIndex =
+    (dartGame.activePlayerIndex + 1) % dartGame.players.length;
+
+  updateActiveUI();
 };
 
 // --- 2. NEUE FUNKTION: WENN DU AUF 1, 2 ODER 3 IM MODAL KLICKST ---
@@ -426,37 +495,59 @@ window.confirmCheckout = (checkoutDarts) => {
   currentPlayer.legs++;
   alert("GAME SHOT! " + currentPlayer.name + " gewinnt das Leg.");
 
-  // --- SPIEL AUTOMATISCH SPEICHERN ---
-  // WICHTIG: Prüfe in der Konsole (F12), ob diese Namen identisch sind!
-  const myProfileName = currentUserData ? currentUserData.name : "";
-  console.log("Spieler:", currentPlayer.name, "| Profil:", myProfileName);
+  // --- BERECHNUNG DER DARTS FÜR DIESES LEG (NEU) ---
+  // (Anzahl der Aufnahmen - 1) * 3 + Darts im letzten Wurf
+  const totalDartsInLeg = (currentPlayer.throws - 1) * 3 + checkoutDarts;
 
-  if (currentUser && currentPlayer.name === myProfileName) {
-    // 1. High Finish Check
+  // --- SPIEL AUTOMATISCH SPEICHERN ---
+  // Wir nutzen den Index-Check (0 = Host), damit nur DEINE Stats gespeichert werden
+  if (currentUser && dartGame.activePlayerIndex === 0) {
+    // 1. High Finish & Bestes Leg Check im User-Profil
     const userRef = ref(db, "users/" + currentUser.uid);
     get(userRef).then((snapshot) => {
       const userData = snapshot.val();
+
+      // High Finish Check
       const currentHigh =
         userData && userData.highFinish ? userData.highFinish : 0;
       if (val > currentHigh) {
         update(userRef, { highFinish: val });
-        console.log("Neuer Rekord gespeichert:", val);
+        console.log("Neuer Rekord (High Finish) gespeichert:", val);
+      }
+
+      // Bestes Leg Check (NEU)
+      // Weniger Darts sind besser, daher prüfen wir auf den kleineren Wert
+      const currentBestLeg =
+        userData && userData.bestLeg ? userData.bestLeg : 999;
+      if (totalDartsInLeg < currentBestLeg) {
+        update(userRef, { bestLeg: totalDartsInLeg });
+        console.log("Neuer Rekord (Bestes Leg) gespeichert:", totalDartsInLeg);
       }
     });
 
-    // 2. Average präzise berechnen
-    const totalDartsThrown = (currentPlayer.throws - 1) * 3 + checkoutDarts;
+    // 2. Average berechnen
     const sessionAvg = parseFloat(
-      ((currentPlayer.totalPoints / totalDartsThrown) * 3).toFixed(2),
+      ((currentPlayer.totalPoints / totalDartsInLeg) * 3).toFixed(2),
     );
 
-    // 3. In 'user_stats' speichern (Passend zum Dashboard!)
+    // 3. First 9 Average berechnen (NEU)
+    const dartsInFirst9 = (currentPlayer.first9Throws || 0) * 3;
+    const f9Avg =
+      dartsInFirst9 > 0
+        ? parseFloat(
+            ((currentPlayer.first9Total / dartsInFirst9) * 3).toFixed(2),
+          )
+        : 0;
+
+    // 4. In 'user_stats' speichern (Passend zum Dashboard & Pro Stats!)
     const statsRef = ref(db, "user_stats");
     push(statsRef, {
       uid: currentUser.uid,
       name: "Training " + dartGame.startScore,
       mode: "x01",
       finalAvg: sessionAvg,
+      first9Avg: f9Avg, // Für die Trend-Analyse
+      dartsUsed: totalDartsInLeg, // Die Darts für dieses Leg
       players: dartGame.players.map((p) => p.name),
       createdAt: Date.now(),
       checkoutDart: checkoutDarts,
@@ -466,6 +557,11 @@ window.confirmCheckout = (checkoutDarts) => {
   // Spiel zurücksetzen für das nächste Leg
   dartGame.players.forEach((p) => {
     p.score = dartGame.startScore;
+    // Stats für das neue Leg zurücksetzen (Wichtig für korrekte Darts-Zählung)
+    p.totalPoints = 0;
+    p.throws = 0;
+    p.first9Total = 0;
+    p.first9Throws = 0;
   });
 
   dartGame.activePlayerIndex =
