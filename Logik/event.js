@@ -659,15 +659,15 @@ function updateOnlyStatsAndRecords(ev) {
         <tr>
           <td style="text-align:left; font-weight:bold; font-size:0.8rem;">${p}</td>
           <td>
-            <button class="rec-btn" onclick="window.modRec('${p}','m180',1)">180er</button>
+            <button class="rec-btn" onclick="window.modRec('${p}','m180',1)">+1</button>
             <span class="rec-num" onclick="window.modRec('${p}','m180',-1)">${r.m180}</span>
           </td>
           <td>
-            <button class="rec-btn" onclick="window.modRec('${p}','hf',1)">HF</button>
+            <button class="rec-btn" onclick="window.modRec('${p}','hf',1)">+1</button>
             <span class="rec-num" onclick="window.modRec('${p}','hf',-1)">${r.hf}</span>
           </td>
           <td>
-            <button class="rec-btn" onclick="window.modRec('${p}','sl',1)">SL</button>
+            <button class="rec-btn" onclick="window.modRec('${p}','sl',1)">+1</button>
             <span class="rec-num" onclick="window.modRec('${p}','sl',-1)">${r.sl}</span>
           </td>
         </tr>`;
